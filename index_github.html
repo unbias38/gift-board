@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  body { font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif; }
+  .card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; box-shadow:0 1px 3px rgba(15,23,42,.06); }
+  th.sortable { cursor:pointer; user-select:none; white-space:nowrap; }
+  th.sortable:hover { color:#0f766e; }
+  .tbl-wrap { max-height:72vh; overflow:auto; }
+  .tbl-wrap thead th { position:sticky; top:0; background:#f1f5f9; z-index:10; box-shadow:0 1px 0 #e2e8f0; }
+  th[title], span[title].hint { cursor:help; text-decoration:underline dotted #94a3b8 2px; text-underline-offset:3px; }
+  .badge { display:inline-block; padding:1px 8px; border-radius:9999px; font-size:11px; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+
+<header class="bg-white border-b border-slate-200">
+  <div class="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center gap-3">
+    <h1 class="text-xl font-bold text-slate-900">🎁 股東會紀念品看板</h1>
+    <span id="todayLabel" class="text-sm text-slate-500"></span>
+    <label class="flex items-center gap-1.5 text-sm ml-auto cursor-pointer select-none">
+      <input id="onlyMine" type="checkbox" class="accent-teal-600 w-4 h-4">只看我的持股
+      <span id="mineCount" class="text-xs text-slate-400"></span>
+    </label>
+    <button onclick="editMy()" class="text-xs px-2.5 py-1 rounded-lg border border-teal-600 text-teal-700 hover:bg-teal-50">設定持股</button>
+    <span id="updatedLabel" class="text-xs text-slate-400"></span>
+  </div>
+  <nav class="max-w-7xl mx-auto px-4 flex gap-1 text-sm">
+    <button data-tab="dash"  class="tabbtn px-4 py-2 rounded-t-lg font-medium border-b-2 border-teal-600 text-teal-700 bg-teal-50">今日看板</button>
+    <button data-tab="table" class="tabbtn px-4 py-2 rounded-t-lg font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">全部資料</button>
+    <button data-tab="stats" class="tabbtn px-4 py-2 rounded-t-lg font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">統計圖表</button>
+  </nav>
+</header>
+
+<main class="max-w-7xl mx-auto px-4 py-6">
+  <div id="loading" class="text-center py-20 text-slate-400">資料載入中…</div>
+
+  <!-- ===== 今日看板 ===== -->
+  <section id="tab-dash" class="hidden space-y-6">
+    <div class="card p-4 border-l-4 !border-l-fuchsia-400">
+      <h2 class="font-bold mb-2">📞 補單提醒（我的持股，開會日30天內）</h2>
+      <p class="text-xs text-slate-400 mb-2">零股大多收不到開會通知書，建議電洽股務代理補單；標 eGift 者完成電投即可線上領，免補單</p>
+      <div id="secResupply" class="overflow-x-auto"></div>
+    </div>
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="card p-4 border-l-4 !border-l-amber-400">
+        <h2 class="font-bold mb-2">⏰ 今日最後買進日</h2>
+        <p class="text-xs text-slate-400 mb-2">今天買進並持有，還來得及領</p>
+        <div id="secLastbuy"></div>
+      </div>
+      <div class="card p-4 border-l-4 !border-l-orange-400">
+        <h2 class="font-bold mb-2">📦 今日代領截止</h2>
+        <p class="text-xs text-slate-400 mb-2">委託代領服務最後一天</p>
+        <div id="secDeadline"></div>
+      </div>
+      <div class="card p-4 border-l-4 !border-l-emerald-400">
+        <h2 class="font-bold mb-2">🗳️ 今日電投截止</h2>
+        <p class="text-xs text-slate-400 mb-2">電子投票最後一天（零股領取關鍵）</p>
+        <div id="secEvote"></div>
+      </div>
+    </div>
+    <div class="card p-4 border-l-4 !border-l-sky-400">
+      <h2 class="font-bold mb-3">🔜 未來3日內即將到期</h2>
+      <div id="secSoon" class="overflow-x-auto"></div>
+    </div>
+  </section>
+
+  <!-- ===== 全部資料 ===== -->
+  <section id="tab-table" class="hidden">
+    <div class="card p-4 mb-4 flex flex-wrap gap-3 items-center text-sm">
+      <input id="q" type="search" placeholder="搜尋代號／名稱／紀念品…"
+             class="border border-slate-300 rounded-lg px-3 py-1.5 w-56 focus:outline-none focus:ring-2 focus:ring-teal-500">
+      <select id="fYear" class="border border-slate-300 rounded-lg px-2 py-1.5"></select>
+      <select id="fMkt" class="border border-slate-300 rounded-lg px-2 py-1.5">
+        <option value="">市場別（全部）</option><option>上市</option><option>上櫃</option><option>興櫃</option>
+      </select>
+      <select id="fRoom" class="border border-slate-300 rounded-lg px-2 py-1.5">
+        <option value="">零股可代領（全部）</option><option value="是">是</option><option value="否">否</option>
+      </select>
+      <select id="fLimit" class="border border-slate-300 rounded-lg px-2 py-1.5">
+        <option value="">領取限制（全部）</option><option value="無">無限制</option>
+        <option value="需證件正本">需證件正本</option><option value="需紙本通知單">需紙本通知單</option>
+      </select>
+      <select id="fGtype" class="border border-slate-300 rounded-lg px-2 py-1.5">
+        <option value="">類型（全部）</option><option value="票券">票券類</option><option value="實物">實物類</option>
+      </select>
+      <select id="fEgift" class="border border-slate-300 rounded-lg px-2 py-1.5">
+        <option value="">eGift（全部）</option><option value="是">支援eGift</option>
+      </select>
+      <span id="countLabel" class="text-slate-400 ml-auto"></span>
+    </div>
+    <div class="card">
+      <div class="tbl-wrap">
+      <table class="w-full text-sm">
+        <thead id="thead" class="text-slate-600"></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      </div>
+      <div class="p-3 text-center">
+        <button id="moreBtn" class="hidden px-4 py-1.5 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">顯示更多</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 統計圖表 ===== -->
+  <section id="tab-stats" class="hidden grid md:grid-cols-2 gap-4">
+    <div class="card p-4"><h2 class="font-bold mb-3">本年度紀念品類型</h2><canvas id="chartType"></canvas></div>
+    <div class="card p-4"><h2 class="font-bold mb-3">零股1股可代領比例（本年度）</h2><canvas id="chartRoom"></canvas></div>
+    <div class="card p-4 md:col-span-2"><h2 class="font-bold mb-3">每月股東會場次（本年度）</h2><canvas id="chartMonth"></canvas></div>
+  </section>
+</main>
+
+<footer class="max-w-7xl mx-auto px-4 py-6 text-xs text-slate-400">
+  資料來源：股代網（每日爬取）、零股屋（每日比對）、集保eGift名單（每日比對）、玩股網。紀念品與領取規定以各公司開會通知書為準。
+</footer>
+
+<div id="visits" class="fixed bottom-2 right-3 text-[11px] text-slate-300 select-none"></div>
+
+<script>
+var DATA = [], MY = {};
+var COL = {Y:0, CODE:1, NAME:2, GIFT:3, LASTBUY:4, MEET:5, TYPE:6, MKT:7,
+           AGENT:8, TEL:9, DEADLINE:10, EV1:11, EV2:12, ODD:13, ROOM:14, LIMIT:15,
+           PRICE:16, EGIFT:17};
+var TODAY;
+function isTicket(g) { return /商品卡|禮物卡|禮券|提貨|即享券|兌換|抵用|咖啡卡|門票|禮卡/.test(g||''); }
+function isMine(r) { return !!MY[r[COL.CODE]]; }
+function loadMy() {
+  MY = {};
+  try { JSON.parse(localStorage.getItem('myCodes') || '[]').forEach(function(c){ MY[c] = true; }); } catch (e) {}
+}
+function refreshMineCount() {
+  var n = Object.keys(MY).length;
+  document.getElementById('mineCount').textContent = n ? '('+n+'檔)' : '(未設定)';
+}
+function editMy() {
+  var cur = Object.keys(MY).join(',');
+  var input = prompt('輸入你的持股代號（逗號、空白或換行分隔），存在你自己的瀏覽器，不會上傳：', cur);
+  if (input === null) return;
+  var codes = input.split(/[\s,，、]+/).filter(function(c){ return /^\d{4,6}[A-Z]?$/.test(c.trim()); }).map(function(c){ return c.trim(); });
+  localStorage.setItem('myCodes', JSON.stringify(codes));
+  loadMy(); refreshMineCount(); buildDash(); buildTable();
+}
+function onlyMineOn() { return document.getElementById('onlyMine').checked; }
+function dashData() { return onlyMineOn() ? DATA.filter(isMine) : DATA; }
+
+// ===== 請把下面這行換成你的 GAS API 網址（部署後的 /exec 網址 + ?api=1）=====
+var API_URL = 'https://script.google.com/macros/s/AKfycby1UCB2zFL_Y30y52iAqpV9RnuATNtmhUmQB1NfO9BZcj_DCX7VRlPhzO0e_CyWTTof/exec?api=1';
+
+fetch(API_URL).then(function(r){ return r.json(); }).then(init).catch(function(e){
+  document.getElementById('loading').textContent = '載入失敗：' + e.message + '（請確認 API_URL 已設定、部署存取權為「任何人」）';
+});
+
+function pd(s) {
+  if (!s) return null;
+  var m = String(s).match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  return m ? new Date(+m[1], +m[2]-1, +m[3]) : null;
+}
+function fmt(d) { return d ? (d.getFullYear()+'/'+(d.getMonth()+1)+'/'+d.getDate()) : ''; }
+function esc(s) { return String(s||'').replace(/[&<>"]/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+function init(res) {
+  DATA = res.rows;
+  loadMy();
+  TODAY = pd(res.today) || new Date(); TODAY.setHours(0,0,0,0);
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('todayLabel').textContent = fmt(TODAY) + '（' + ['日','一','二','三','四','五','六'][TODAY.getDay()] + '）';
+  document.getElementById('updatedLabel').textContent = '資料更新：' + res.updatedAt;
+  if (res.visits) document.getElementById('visits').textContent = '瀏覽 ' + Number(res.visits).toLocaleString() + ' 人次';
+  refreshMineCount();
+  document.getElementById('onlyMine').addEventListener('change', function(){ buildDash(); buildTable(); });
+  buildDash(); buildFilters(); buildTable(); buildCharts();
+  showTab('dash');
+}
+
+/* ---------- 分頁切換 ---------- */
+document.querySelectorAll('.tabbtn').forEach(function(b){
+  b.onclick = function(){ showTab(b.dataset.tab); };
+});
+function showTab(t) {
+  ['dash','table','stats'].forEach(function(x){
+    document.getElementById('tab-'+x).classList.toggle('hidden', x!==t);
+  });
+  document.querySelectorAll('.tabbtn').forEach(function(b){
+    var on = b.dataset.tab === t;
+    b.className = 'tabbtn px-4 py-2 rounded-t-lg font-medium border-b-2 ' +
+      (on ? 'border-teal-600 text-teal-700 bg-teal-50' : 'border-transparent text-slate-500 hover:text-slate-700');
+  });
+}
+
+/* ---------- 今日看板 ---------- */
+function rowChip(r, extra) {
+  var star = isMine(r) ? '<span class="text-amber-500">★</span> ' : '';
+  var lim = r[COL.LIMIT] ? '<span class="badge bg-rose-100 text-rose-700">'+esc(r[COL.LIMIT])+'</span>' : '';
+  var room = r[COL.ROOM]==='是' ? '<span class="badge bg-emerald-100 text-emerald-700">零股可代領</span>' : '';
+  var eg = r[COL.EGIFT]==='是' ? '<span class="badge bg-violet-100 text-violet-700">eGift</span>' : '';
+  return '<div class="py-2 border-b border-slate-100 last:border-0">' + star +
+    '<span class="font-mono font-semibold text-teal-700">'+esc(r[COL.CODE])+'</span> ' +
+    '<span class="font-medium">'+esc(r[COL.NAME])+'</span> ' + room + ' ' + eg + ' ' + lim +
+    '<div class="text-xs text-slate-500 mt-0.5">'+esc(r[COL.GIFT])+ (extra ? '　<span class="text-slate-400">'+esc(extra)+'</span>' : '') +'</div></div>';
+}
+function buildDash() {
+  var same = function(a,b){ return a && b && a.getTime() === b.getTime(); };
+  var soonEnd = new Date(TODAY); soonEnd.setDate(soonEnd.getDate()+3);
+  var resupEnd = new Date(TODAY); resupEnd.setDate(resupEnd.getDate()+30);
+  var lb=[], dl=[], ev=[], soon=[], resup=[];
+  var src = dashData().slice();
+  src.sort(function(a,b){ return isMine(b) - isMine(a); });
+  src.forEach(function(r){
+    var d1=pd(r[COL.LASTBUY]), d2=pd(r[COL.DEADLINE]), d3=pd(r[COL.EV2]);
+    if (same(d1,TODAY)) lb.push(rowChip(r,'股東會 '+r[COL.MEET]));
+    if (same(d2,TODAY)) dl.push(rowChip(r,'股東會 '+r[COL.MEET]));
+    if (same(d3,TODAY)) ev.push(rowChip(r,'電投 '+r[COL.EV1]+'~'+r[COL.EV2]));
+    [[d1,'最後買進','amber'],[d2,'代領截止','orange'],[d3,'電投截止','emerald']].forEach(function(p){
+      if (p[0] && p[0] > TODAY && p[0] <= soonEnd) soon.push({d:p[0], t:p[1], c:p[2], r:r});
+    });
+  });
+  // 補單提醒：永遠只看我的持股
+  DATA.filter(isMine).forEach(function(r){
+    var m = pd(r[COL.MEET]);
+    if (m && m > TODAY && m <= resupEnd) resup.push(r);
+  });
+  resup.sort(function(a,b){ return pd(a[COL.MEET]) - pd(b[COL.MEET]); });
+  document.getElementById('secResupply').innerHTML =
+    Object.keys(MY).length === 0
+    ? '<div class="text-slate-400 text-sm">尚未設定持股——點右上「設定持股」輸入代號即可啟用（只存在你的瀏覽器）</div>'
+    : (resup.length === 0
+      ? '<div class="text-slate-300 text-sm">（30天內無你持股的股東會）</div>'
+      : '<table class="w-full text-sm"><thead class="text-slate-500 text-left"><tr>' +
+        '<th class="py-1 pr-3"'+tip('股東會')+'>股東會</th><th class="pr-3">代號</th><th class="pr-3">名稱</th><th class="pr-3">紀念品</th><th class="pr-3">股務代理</th><th class="pr-3">電話</th><th'+tip('eGift')+'>備註</th></tr></thead><tbody>' +
+        resup.map(function(r){
+          return '<tr class="border-t border-slate-100">' +
+            '<td class="py-1.5 pr-3 whitespace-nowrap">'+esc(r[COL.MEET])+'</td>' +
+            '<td class="pr-3 font-mono text-teal-700">'+esc(r[COL.CODE])+'</td>' +
+            '<td class="pr-3">'+esc(r[COL.NAME])+'</td>' +
+            '<td class="pr-3 text-slate-500">'+esc(r[COL.GIFT])+'</td>' +
+            '<td class="pr-3">'+esc(r[COL.AGENT])+'</td>' +
+            '<td class="pr-3 whitespace-nowrap">'+esc(r[COL.TEL])+'</td>' +
+            '<td>'+(r[COL.EGIFT]==='是' ? '<span class="badge bg-violet-100 text-violet-700">eGift免補單</span>' : '')+'</td></tr>';
+        }).join('') + '</tbody></table>');
+  var none = '<div class="text-slate-300 text-sm py-3">（今日無）</div>';
+  document.getElementById('secLastbuy').innerHTML  = lb.join('') || none;
+  document.getElementById('secDeadline').innerHTML = dl.join('') || none;
+  document.getElementById('secEvote').innerHTML    = ev.join('') || none;
+  soon.sort(function(a,b){ return a.d - b.d; });
+  document.getElementById('secSoon').innerHTML = soon.length ?
+    '<table class="w-full text-sm"><thead class="text-slate-500 text-left"><tr>' +
+    '<th class="py-1 pr-3">日期</th><th class="pr-3">類型</th><th class="pr-3">代號</th><th class="pr-3">名稱</th><th class="pr-3">紀念品</th><th class="pr-3"'+tip('零股可代領')+'>零股</th><th class="pr-3"'+tip('eGift')+'>eGift</th><th'+tip('領取限制')+'>限制</th></tr></thead><tbody>' +
+    soon.map(function(x){
+      return '<tr class="border-t border-slate-100'+(isMine(x.r)?' bg-amber-50/60':'')+'">' +
+        '<td class="py-1.5 pr-3 whitespace-nowrap">'+fmt(x.d)+'</td>' +
+        '<td class="pr-3"><span class="badge bg-'+x.c+'-100 text-'+x.c+'-700">'+x.t+'</span></td>' +
+        '<td class="pr-3 font-mono text-teal-700">'+(isMine(x.r)?'★':'')+esc(x.r[COL.CODE])+'</td>' +
+        '<td class="pr-3">'+esc(x.r[COL.NAME])+'</td>' +
+        '<td class="pr-3 text-slate-500">'+esc(x.r[COL.GIFT])+'</td>' +
+        '<td class="pr-3">'+esc(x.r[COL.ROOM])+'</td>' +
+        '<td class="pr-3">'+(x.r[COL.EGIFT]==='是'?'是':'')+'</td>' +
+        '<td class="text-rose-600">'+esc(x.r[COL.LIMIT])+'</td></tr>';
+    }).join('') + '</tbody></table>'
+    : '<div class="text-slate-300 text-sm">（無）</div>';
+}
+
+/* ---------- 全部資料表 ---------- */
+var view = [], shown = 0, PAGE = 100, sortCol = COL.LASTBUY, sortAsc = false;
+var TIPS = {
+  '股價': '參考股價（每日更新，Yahoo收盤價，抓不到時為股代網價）。買1股的成本約=股價，用來估算領紀念品的CP值',
+  '最後買進日': '最晚必須在這一天（含當日）買進並持有，才具備領取該次紀念品的資格',
+  '股東會': '股東會召開日期。零股補單通常在開會前一個月左右辦理',
+  '性質': '常會＝年度股東常會（每年一次）；臨時＝股東臨時會（不定期）',
+  '市場': '上市＝證交所；上櫃＝櫃買中心；興櫃＝登錄興櫃（流動性較低）',
+  '代領截止': '委託代領服務（股代網）收件的截止日，超過就只能親領或電投領取',
+  '電投截止': '電子投票的最後一天。零股股東大多靠「完成電投」取得領取資格，務必在此日前投完',
+  '零股可代領': '「是」＝列於零股屋730檔清單，持有1股即可委託代領；「否」＝未列入，零股可能難領',
+  '領取限制': '需證件正本＝領取時須出示身分證件正本；需紙本通知單＝須憑紙本開會通知書。兩者對零股族都較麻煩',
+  'eGift': '集保「紀念品電子化」：完成電子投票後直接在投票平台線上領電子券，免排隊、免補單、免通知書'
+};
+var TCOLS = [
+  {c:COL.Y, n:'年度'}, {c:COL.CODE, n:'代號'}, {c:COL.NAME, n:'名稱'}, {c:COL.GIFT, n:'紀念品'},
+  {c:COL.PRICE, n:'股價', num:1},
+  {c:COL.LASTBUY, n:'最後買進日', d:1}, {c:COL.MEET, n:'股東會', d:1}, {c:COL.TYPE, n:'性質'},
+  {c:COL.MKT, n:'市場'}, {c:COL.DEADLINE, n:'代領截止', d:1}, {c:COL.EV2, n:'電投截止', d:1},
+  {c:COL.ROOM, n:'零股可代領'}, {c:COL.LIMIT, n:'領取限制'}, {c:COL.EGIFT, n:'eGift'}
+];
+function tip(name) { return TIPS[name] ? ' title="' + TIPS[name].replace(/"/g, '&quot;') + '"' : ''; }
+function buildFilters() {
+  var years = {};
+  DATA.forEach(function(r){ years[r[COL.Y]] = 1; });
+  var sel = document.getElementById('fYear');
+  sel.innerHTML = '<option value="">年度（全部）</option>' +
+    Object.keys(years).sort().reverse().map(function(y){ return '<option>'+y+'</option>'; }).join('');
+  ['q','fYear','fMkt','fRoom','fLimit','fGtype','fEgift'].forEach(function(id){
+    document.getElementById(id).addEventListener('input', buildTable);
+  });
+  document.getElementById('moreBtn').onclick = function(){ renderRows(false); };
+  var thead = document.getElementById('thead');
+  thead.innerHTML = '<tr>' + TCOLS.map(function(tc, i){
+    return '<th class="sortable px-3 py-2 text-left" data-i="'+i+'"'+tip(tc.n)+'>'+tc.n+' <span class="arrow text-teal-600"></span></th>';
+  }).join('') + '</tr>';
+  thead.querySelectorAll('th').forEach(function(th){
+    th.onclick = function(){
+      var tc = TCOLS[+th.dataset.i];
+      if (sortCol === tc.c) sortAsc = !sortAsc; else { sortCol = tc.c; sortAsc = true; }
+      buildTable();
+    };
+  });
+}
+function buildTable() {
+  var q = document.getElementById('q').value.trim().toLowerCase();
+  var fy = document.getElementById('fYear').value, fm = document.getElementById('fMkt').value;
+  var fr = document.getElementById('fRoom').value, fl = document.getElementById('fLimit').value;
+  var fg = document.getElementById('fGtype').value, fe = document.getElementById('fEgift').value;
+  view = dashData().filter(function(r){
+    if (fy && r[COL.Y] !== fy) return false;
+    if (fm && r[COL.MKT] !== fm) return false;
+    if (fr && r[COL.ROOM] !== fr) return false;
+    if (fl === '無' ? r[COL.LIMIT] !== '' : (fl && r[COL.LIMIT] !== fl)) return false;
+    if (fg && (isTicket(r[COL.GIFT]) ? '票券' : '實物') !== fg) return false;
+    if (fe && r[COL.EGIFT] !== fe) return false;
+    if (q && (r[COL.CODE]+' '+r[COL.NAME]+' '+r[COL.GIFT]).toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  });
+  var isDate = TCOLS.some(function(tc){ return tc.c === sortCol && tc.d; });
+  var isNum  = TCOLS.some(function(tc){ return tc.c === sortCol && tc.num; });
+  view.sort(function(a,b){
+    var va = a[sortCol], vb = b[sortCol];
+    if (isDate) { va = pd(va) ? pd(va).getTime() : -1; vb = pd(vb) ? pd(vb).getTime() : -1; }
+    else if (isNum) { va = parseFloat(va); vb = parseFloat(vb);
+      if (isNaN(va)) va = sortAsc ? Infinity : -Infinity;
+      if (isNaN(vb)) vb = sortAsc ? Infinity : -Infinity; }
+    if (va < vb) return sortAsc ? -1 : 1;
+    if (va > vb) return sortAsc ? 1 : -1;
+    return 0;
+  });
+  document.querySelectorAll('#thead .arrow').forEach(function(s, i){
+    s.textContent = (TCOLS[i].c === sortCol) ? (sortAsc ? '▲' : '▼') : '';
+  });
+  document.getElementById('countLabel').textContent = '共 ' + view.length + ' 筆';
+  renderRows(true);
+}
+function renderRows(reset) {
+  if (reset) { shown = 0; document.getElementById('tbody').innerHTML = ''; }
+  var end = Math.min(shown + PAGE, view.length);
+  var html = '';
+  for (var i = shown; i < end; i++) {
+    var r = view[i];
+    html += '<tr class="border-t border-slate-100 hover:bg-teal-50/40'+(isMine(r)?' bg-amber-50/60':'')+'">' + TCOLS.map(function(tc){
+      var v = esc(r[tc.c]);
+      if (tc.c === COL.CODE) v = (isMine(r)?'<span class="text-amber-500">★</span>':'') + '<span class="font-mono font-semibold text-teal-700">'+v+'</span>';
+      if (tc.c === COL.LIMIT && v) v = '<span class="text-rose-600">'+v+'</span>';
+      if (tc.c === COL.ROOM) v = v==='是' ? '<span class="text-emerald-600">是</span>' : v;
+      if (tc.c === COL.EGIFT && v==='是') v = '<span class="badge bg-violet-100 text-violet-700">eGift</span>';
+      return '<td class="px-3 py-1.5 align-top">'+v+'</td>';
+    }).join('') + '</tr>';
+  }
+  document.getElementById('tbody').insertAdjacentHTML('beforeend', html);
+  shown = end;
+  document.getElementById('moreBtn').classList.toggle('hidden', shown >= view.length);
+}
+
+/* ---------- 統計圖表 ---------- */
+function buildCharts() {
+  var year = String(TODAY.getFullYear());
+  var cur = DATA.filter(function(r){ return r[COL.Y] === year; });
+  var tk = 0, it = 0;
+  cur.forEach(function(r){ isTicket(r[COL.GIFT]) ? tk++ : it++; });
+  var roomY = cur.filter(function(r){ return r[COL.ROOM]==='是'; }).length;
+  var months = new Array(12).fill(0);
+  cur.forEach(function(r){ var d = pd(r[COL.MEET]); if (d) months[d.getMonth()]++; });
+  var PAL = ['#0d9488','#f59e0b','#64748b','#e11d48'];
+  new Chart(document.getElementById('chartType'), {
+    type: 'doughnut',
+    data: {labels:['票券類（商品卡/禮券等）','實物類'], datasets:[{data:[tk,it], backgroundColor:[PAL[0],PAL[1]]}]},
+    options: {plugins:{legend:{position:'bottom'}}}
+  });
+  new Chart(document.getElementById('chartRoom'), {
+    type: 'doughnut',
+    data: {labels:['零股可代領','否'], datasets:[{data:[roomY, cur.length-roomY], backgroundColor:[PAL[0],PAL[2]]}]},
+    options: {plugins:{legend:{position:'bottom'}}}
+  });
+  new Chart(document.getElementById('chartMonth'), {
+    type: 'bar',
+    data: {labels:['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'],
+           datasets:[{label:year+'年股東會場次', data:months, backgroundColor:PAL[0], borderRadius:6}]},
+    options: {plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{precision:0}}}}
+  });
+}
+</script>
+</body>
+</html>
