@@ -101,6 +101,7 @@
       </div>
       <div class="p-3 text-center">
         <button id="moreBtn" class="hidden px-4 py-1.5 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">顯示更多</button>
+        <button id="allBtn" class="hidden px-4 py-1.5 text-sm rounded-lg border border-teal-600 text-teal-700 hover:bg-teal-50 ml-2">全部展開</button>
       </div>
     </div>
   </section>
@@ -320,6 +321,7 @@ function buildFilters() {
     document.getElementById(id).addEventListener('input', buildTable);
   });
   document.getElementById('moreBtn').onclick = function(){ renderRows(false); };
+  document.getElementById('allBtn').onclick = function(){ while (shown < view.length) renderRows(false); };
   var thead = document.getElementById('thead');
   thead.innerHTML = '<tr>' + TCOLS.map(function(tc, i){
     return '<th class="sortable px-3 py-2 text-left" data-i="'+i+'"'+tip(tc.n)+'>'+tc.n+' <span class="arrow text-teal-600"></span></th>';
@@ -383,6 +385,7 @@ function renderRows(reset) {
   document.getElementById('tbody').insertAdjacentHTML('beforeend', html);
   shown = end;
   document.getElementById('moreBtn').classList.toggle('hidden', shown >= view.length);
+  document.getElementById('allBtn').classList.toggle('hidden', shown >= view.length);
 }
 
 /* ---------- 統計圖表 ---------- */
