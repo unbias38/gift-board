@@ -119,6 +119,18 @@
 
 <div id="visits" class="fixed bottom-2 right-3 text-[11px] text-slate-300 select-none"></div>
 
+<div id="myPanel" class="hidden fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-5">
+    <h3 class="font-bold mb-1">設定我的持股</h3>
+    <p class="text-xs text-slate-400 mb-3">一行一個代號（逗號、空白分隔也可以）。只存在你自己的瀏覽器，不會上傳。<br>小技巧：在「全部資料」表格直接點每列的 ★ 也能加入／移除。</p>
+    <textarea id="myText" rows="8" class="w-full border border-slate-300 rounded-lg p-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-teal-500" placeholder="2330&#10;0056&#10;2885"></textarea>
+    <div class="flex justify-end gap-2 mt-3">
+      <button onclick="closeMy(false)" class="px-4 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50">取消</button>
+      <button onclick="closeMy(true)" class="px-4 py-1.5 text-sm rounded-lg bg-teal-600 text-white hover:bg-teal-700">儲存</button>
+    </div>
+  </div>
+</div>
+
 <script>
 var DATA = [], MY = {};
 var COL = {Y:0, CODE:1, NAME:2, GIFT:3, LASTBUY:4, MEET:5, TYPE:6, MKT:7,
@@ -135,13 +147,28 @@ function refreshMineCount() {
   var n = Object.keys(MY).length;
   document.getElementById('mineCount').textContent = n ? '('+n+'檔)' : '(未設定)';
 }
+function saveMy() {
+  localStorage.setItem('myCodes', JSON.stringify(Object.keys(MY)));
+  refreshMineCount(); buildDash(); buildTable();
+}
+function toggleMine(code) {
+  if (MY[code]) delete MY[code]; else MY[code] = true;
+  saveMy();
+}
 function editMy() {
-  var cur = Object.keys(MY).join(',');
-  var input = prompt('輸入你的持股代號（逗號、空白或換行分隔），存在你自己的瀏覽器，不會上傳：', cur);
-  if (input === null) return;
-  var codes = input.split(/[\s,，、]+/).filter(function(c){ return /^\d{4,6}[A-Z]?$/.test(c.trim()); }).map(function(c){ return c.trim(); });
-  localStorage.setItem('myCodes', JSON.stringify(codes));
-  loadMy(); refreshMineCount(); buildDash(); buildTable();
+  document.getElementById('myPanel').classList.remove('hidden');
+  document.getElementById('myText').value = Object.keys(MY).join('\n');
+}
+function closeMy(save) {
+  if (save) {
+    var codes = document.getElementById('myText').value
+      .split(/[\s,，、;；]+/).map(function(c){ return c.trim(); })
+      .filter(function(c){ return /^\d{4,6}[A-Z]?$/.test(c); });
+    MY = {};
+    codes.forEach(function(c){ MY[c] = true; });
+    saveMy();
+  }
+  document.getElementById('myPanel').classList.add('hidden');
 }
 function onlyMineOn() { return document.getElementById('onlyMine').checked; }
 function dashData() { return onlyMineOn() ? DATA.filter(isMine) : DATA; }
@@ -347,7 +374,7 @@ function renderRows(reset) {
     var r = view[i];
     html += '<tr class="border-t border-slate-100 hover:bg-teal-50/40'+(isMine(r)?' bg-amber-50/60':'')+'">' + TCOLS.map(function(tc){
       var v = esc(r[tc.c]);
-      if (tc.c === COL.CODE) v = (isMine(r)?'<span class="text-amber-500">★</span>':'') + '<span class="font-mono font-semibold text-teal-700">'+v+'</span>';
+      if (tc.c === COL.CODE) v = '<span class="cursor-pointer select-none '+(isMine(r)?'text-amber-500':'text-slate-300 hover:text-amber-400')+'" title="點一下加入／移除我的持股" onclick="toggleMine(\''+esc(r[COL.CODE])+'\')">'+(isMine(r)?'★':'☆')+'</span> <span class="font-mono font-semibold text-teal-700">'+v+'</span>';
       if (tc.c === COL.LIMIT && v) v = '<span class="text-rose-600">'+v+'</span>';
       if (tc.c === COL.ROOM) v = v==='是' ? '<span class="text-emerald-600">是</span>' : v;
       if (tc.c === COL.EGIFT && v==='是') v = '<span class="badge bg-violet-100 text-violet-700">eGift</span>';
