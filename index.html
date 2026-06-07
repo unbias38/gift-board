@@ -256,11 +256,10 @@ function buildDash() {
     : (resup.length === 0
       ? '<div class="text-slate-300 text-sm">（30天內無你持股的股東會）</div>'
       : '<table class="w-full text-sm"><thead class="text-slate-500 text-left"><tr>' +
-        '<th class="py-1 pr-3"'+tip('最後買進日')+'>最後買進日</th><th class="pr-3"'+tip('性質')+'>性質</th><th class="pr-3">代號</th><th class="pr-3">名稱</th><th class="pr-3">紀念品</th><th class="pr-3"'+tip('股價')+'>股價</th><th'+tip('eGift')+'>eGift</th></tr></thead><tbody>' +
+        '<th class="py-1 pr-3"'+tip('最後買進日')+'>最後買進日</th><th class="pr-3">代號</th><th class="pr-3">名稱</th><th class="pr-3">紀念品</th><th class="pr-3"'+tip('股價')+'>股價</th><th'+tip('eGift')+'>eGift</th></tr></thead><tbody>' +
         resup.map(function(r){
           return '<tr class="border-t border-slate-100">' +
-            '<td class="py-1.5 pr-3 whitespace-nowrap">'+esc(r[COL.LASTBUY])+'</td>' +
-            '<td class="pr-3">'+(r[COL.TYPE]==='臨時' ? '<span class="badge bg-orange-100 text-orange-700">臨時會</span>' : '常會')+'</td>' +
+            '<td class="py-1.5 pr-3 whitespace-nowrap">'+esc(r[COL.LASTBUY])+(r[COL.TYPE]==='臨時' ? ' <span class="badge bg-orange-100 text-orange-700">臨</span>' : '')+'</td>' +
             '<td class="pr-3 font-mono text-teal-700">'+esc(r[COL.CODE])+'</td>' +
             '<td class="pr-3">'+esc(r[COL.NAME])+'</td>' +
             '<td class="pr-3 text-slate-500">'+esc(r[COL.GIFT])+'</td>' +
